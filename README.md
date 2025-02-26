@@ -17,7 +17,7 @@ Eventify는 Java 애플리케이션을 위한 강력하고 유연한 이벤트 �
 Gradle을 사용하는 경우:
 
 ```gradle
-implementation 'io.github:eventify:1.0.0'
+implementation 'io.github.eventify:eventify:1.0.0'
 ```
 
 Maven을 사용하는 경우:
