@@ -26,14 +26,16 @@ dependencies {
     compileOnly("jakarta.persistence:jakarta.persistence-api:3.1.0")
     
     // 테스트 의존성
-    testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.8.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.8.2")
+    testImplementation("org.junit.platform:junit-platform-commons:1.8.2")
     testImplementation("javax.transaction:javax.transaction-api:1.3")
+    testImplementation("org.assertj:assertj-core:3.24.2")
     
     // RabbitMQ 및 JSON 의존성 (중복 제거)
     implementation("com.rabbitmq:amqp-client:5.16.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.13.4")
-
-    implementation("org.springframework:spring-context:5.3.20")
 }
 
 java {
