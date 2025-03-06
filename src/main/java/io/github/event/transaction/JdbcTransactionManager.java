@@ -2,162 +2,183 @@ package io.github.event.transaction;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.sql.DataSource;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * JDBC 기반 트랜잭션 관리자
+ */
+@Slf4j
 public class JdbcTransactionManager implements TransactionManager {
     
     private final DataSource dataSource;
-    private final ThreadLocal<JdbcTransactionStatus> currentTransaction = new ThreadLocal<>();
-    private final ThreadLocal<List<TransactionSynchronization>> synchronizations = 
-            ThreadLocal.withInitial(ArrayList::new);
+    private final ThreadLocal<Connection> connectionHolder = new ThreadLocal<>();
+    private final ThreadLocal<List<TransactionSynchronization>> synchronizations = new ThreadLocal<>();
     
     public JdbcTransactionManager(DataSource dataSource) {
         this.dataSource = dataSource;
     }
     
     @Override
-    public boolean isTransactionActive() {
-        return currentTransaction.get() != null;
-    }
-    
-    @Override
-    public void registerSynchronization(TransactionSynchronization synchronization) {
-        if (!isTransactionActive()) {
-            throw new IllegalStateException("활성화된 트랜잭션이 없습니다");
-        }
-        synchronizations.get().add(synchronization);
-    }
-    
-    @Override
     public TransactionStatus beginTransaction() {
+        if (isTransactionActive()) {
+            throw new IllegalTransactionStateException("이미 활성화된 트랜잭션이 있습니다");
+        }
+        
         try {
-            Connection connection = dataSource.getConnection();
-            connection.setAutoCommit(false);
-            JdbcTransactionStatus status = new JdbcTransactionStatus(connection);
-            currentTransaction.set(status);
-            return status;
+            // 새로운 커넥션 생성 및 트랜잭션 시작
+            Connection conn = dataSource.getConnection();
+            conn.setAutoCommit(false);
+            connectionHolder.set(conn);
+            synchronizations.set(new ArrayList<>());
+            
+            return new JdbcTransactionStatus();
         } catch (SQLException e) {
-            throw new RuntimeException("트랜잭션 시작 중 오류 발생", e);
+            throw new RuntimeException("트랜잭션 시작 실패", e);
         }
     }
     
     @Override
     public void commit(TransactionStatus status) {
-        if (!(status instanceof JdbcTransactionStatus)) {
-            throw new IllegalArgumentException("JdbcTransactionStatus 타입이 아닙니다");
+        if (!isTransactionActive()) {
+            throw new IllegalTransactionStateException("활성화된 트랜잭션이 없습니다");
         }
         
-        JdbcTransactionStatus jdbcStatus = (JdbcTransactionStatus) status;
-        Connection connection = jdbcStatus.getConnection();
+        if (status.isRollbackOnly()) {
+            throw new IllegalTransactionStateException("트랜잭션이 롤백 전용으로 설정되어 있습니다");
+        }
+        
+        Connection conn = getConnection();
+        List<TransactionSynchronization> syncList = getSynchronizations();
         
         try {
-            if (!status.isRollbackOnly()) {
-                // 커밋 전 콜백 호출
-                for (TransactionSynchronization sync : synchronizations.get()) {
-                    sync.beforeCommit();
-                }
-                
-                connection.commit();
-                
-                // 커밋 후 콜백 호출
-                for (TransactionSynchronization sync : synchronizations.get()) {
-                    sync.afterCommit();
-                }
-            } else {
-                connection.rollback();
-                
-                // 롤백 후 콜백 호출
-                for (TransactionSynchronization sync : synchronizations.get()) {
-                    sync.afterRollback();
-                }
+            // beforeCommit 콜백 호출
+            for (TransactionSynchronization sync : syncList) {
+                sync.beforeCommit();
+            }
+            
+            // 트랜잭션 커밋
+            conn.commit();
+            
+            // afterCommit 콜백 호출
+            for (TransactionSynchronization sync : syncList) {
+                sync.afterCommit();
             }
         } catch (SQLException e) {
+            // 커밋 실패 시 롤백
             try {
-                connection.rollback();
+                conn.rollback();
                 // 롤백 후 콜백 호출
-                for (TransactionSynchronization sync : synchronizations.get()) {
+                for (TransactionSynchronization sync : syncList) {
                     sync.afterRollback();
                 }
             } catch (SQLException ex) {
-                throw new RuntimeException("롤백 중 오류 발생", ex);
+                log.error("롤백 실패", ex);
             }
-            throw new RuntimeException("트랜잭션 커밋 중 오류 발생", e);
+            throw new RuntimeException("트랜잭션 커밋 실패", e);
         } finally {
             try {
-                connection.setAutoCommit(true);
-                connection.close();
+                // afterCompletion 콜백 호출
+                for (TransactionSynchronization sync : syncList) {
+                    sync.afterCompletion();
+                }
+                
+                // 리소스 정리
+                conn.close();
+                connectionHolder.remove();
+                synchronizations.remove();
             } catch (SQLException e) {
-                throw new RuntimeException("연결 정리 중 오류 발생", e);
+                log.error("커넥션 정리 실패", e);
             }
-            
-            // 완료 콜백 호출
-            for (TransactionSynchronization sync : synchronizations.get()) {
-                sync.afterCompletion();
-            }
-            
-            currentTransaction.remove();
-            synchronizations.remove();
         }
     }
     
     @Override
     public void rollback(TransactionStatus status) {
-        if (!(status instanceof JdbcTransactionStatus)) {
-            throw new IllegalArgumentException("JdbcTransactionStatus 타입이 아닙니다");
+        if (!isTransactionActive()) {
+            throw new IllegalTransactionStateException("활성화된 트랜잭션이 없습니다");
         }
         
-        JdbcTransactionStatus jdbcStatus = (JdbcTransactionStatus) status;
-        Connection connection = jdbcStatus.getConnection();
+        Connection conn = getConnection();
+        List<TransactionSynchronization> syncList = getSynchronizations();
         
         try {
-            connection.rollback();
+            // 트랜잭션 롤백
+            conn.rollback();
             
-            // 롤백 후 콜백 호출
-            for (TransactionSynchronization sync : synchronizations.get()) {
+            // afterRollback 콜백 호출
+            for (TransactionSynchronization sync : syncList) {
                 sync.afterRollback();
             }
         } catch (SQLException e) {
-            throw new RuntimeException("트랜잭션 롤백 중 오류 발생", e);
+            throw new RuntimeException("트랜잭션 롤백 실패", e);
         } finally {
             try {
-                connection.setAutoCommit(true);
-                connection.close();
+                // afterCompletion 콜백 호출
+                for (TransactionSynchronization sync : syncList) {
+                    sync.afterCompletion();
+                }
+                
+                // 리소스 정리
+                conn.close();
+                connectionHolder.remove();
+                synchronizations.remove();
             } catch (SQLException e) {
-                throw new RuntimeException("연결 정리 중 오류 발생", e);
+                log.error("커넥션 정리 실패", e);
             }
-            
-            // 완료 콜백 호출
-            for (TransactionSynchronization sync : synchronizations.get()) {
-                sync.afterCompletion();
-            }
-            
-            currentTransaction.remove();
-            synchronizations.remove();
         }
     }
     
+    @Override
+    public boolean isTransactionActive() {
+        return connectionHolder.get() != null;
+    }
+    
+    @Override
+    public void registerSynchronization(TransactionSynchronization synchronization) {
+        if (!isTransactionActive()) {
+            throw new IllegalTransactionStateException("활성화된 트랜잭션이 없습니다");
+        }
+        getSynchronizations().add(synchronization);
+    }
+    
+    /**
+     * 현재 트랜잭션의 JDBC 커넥션을 반환합니다.
+     */
+    public Connection getConnection() {
+        Connection conn = connectionHolder.get();
+        if (conn == null) {
+            throw new IllegalTransactionStateException("활성화된 트랜잭션이 없습니다");
+        }
+        return conn;
+    }
+    
+    private List<TransactionSynchronization> getSynchronizations() {
+        List<TransactionSynchronization> syncList = synchronizations.get();
+        if (syncList == null) {
+            throw new IllegalTransactionStateException("활성화된 트랜잭션이 없습니다");
+        }
+        return syncList;
+    }
+    
+    /**
+     * JDBC 트랜잭션 상태 클래스
+     */
     private static class JdbcTransactionStatus implements TransactionStatus {
-        private final Connection connection;
         private boolean rollbackOnly = false;
-        
-        JdbcTransactionStatus(Connection connection) {
-            this.connection = connection;
-        }
-        
-        Connection getConnection() {
-            return connection;
-        }
         
         @Override
         public boolean isNewTransaction() {
-            return true; // JDBC에서는 항상 새 트랜잭션
+            return true;
         }
         
         @Override
         public void setRollbackOnly() {
-            rollbackOnly = true;
+            this.rollbackOnly = true;
         }
         
         @Override
