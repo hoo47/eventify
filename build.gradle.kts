@@ -25,6 +25,10 @@ dependencies {
     compileOnly("javax.transaction:javax.transaction-api:1.3")
     compileOnly("jakarta.persistence:jakarta.persistence-api:3.1.0")
     
+    // JDBC 관련 의존성 추가 (순수 JDBC)
+    testImplementation("com.h2database:h2:2.2.224")
+    testImplementation("com.zaxxer:HikariCP:5.0.1")
+    
     // 테스트 의존성
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.2")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.8.2")
@@ -32,6 +36,8 @@ dependencies {
     testImplementation("org.junit.platform:junit-platform-commons:1.8.2")
     testImplementation("javax.transaction:javax.transaction-api:1.3")
     testImplementation("org.assertj:assertj-core:3.24.2")
+    testImplementation("org.mockito:mockito-core:4.8.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:4.8.0")
     
     // RabbitMQ 및 JSON 의존성 (중복 제거)
     implementation("com.rabbitmq:amqp-client:5.16.0")

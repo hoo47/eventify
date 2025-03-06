@@ -20,9 +20,9 @@ public enum TransactionPhase {
     AFTER_ROLLBACK,
     
     /**
-     * 트랜잭션과 무관하게 즉시 처리
+     * 트랜잭션 완료 후 단계 (커밋 또는 롤백 후 항상 실행)
      */
-    IMMEDIATE;
+    AFTER_COMPLETION;
     
     /**
      * 트랜잭션 단계가 커밋 관련 단계인지 확인합니다.

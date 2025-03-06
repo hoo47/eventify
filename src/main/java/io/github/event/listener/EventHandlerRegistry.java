@@ -1,14 +1,18 @@
 package io.github.event.listener;
 
-import io.github.event.annotation.*;
-import io.github.event.core.api.Event;
-import io.github.event.core.model.TransactionPhase;
-import lombok.extern.slf4j.Slf4j;
-
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.github.event.annotation.AsyncListener;
+import io.github.event.annotation.AsyncTransactionalListener;
+import io.github.event.annotation.EventHandler;
+import io.github.event.annotation.ListenerMethod;
+import io.github.event.annotation.TransactionalListener;
+import io.github.event.core.api.Event;
+import io.github.event.core.model.TransactionPhase;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class EventHandlerRegistry {
@@ -29,9 +33,17 @@ public class EventHandlerRegistry {
         // 핸들러 인스턴스 저장
         handlerInstances.put(handler.getClass(), handler);
 
+        // 모든 메서드를 검사하여 이벤트 리스너 어노테이션이 있는 메서드 등록
         Arrays.stream(handler.getClass().getMethods())
-                .filter(method -> method.isAnnotationPresent(ListenerMethod.class))
+                .filter(method -> isListenerMethod(method))
                 .forEach(method -> registerMethod(handler, method));
+    }
+
+    private boolean isListenerMethod(Method method) {
+        return method.isAnnotationPresent(ListenerMethod.class) ||
+               method.isAnnotationPresent(AsyncListener.class) ||
+               method.isAnnotationPresent(TransactionalListener.class) ||
+               method.isAnnotationPresent(AsyncTransactionalListener.class);
     }
 
     private void registerMethod(Object handler, Method method) {

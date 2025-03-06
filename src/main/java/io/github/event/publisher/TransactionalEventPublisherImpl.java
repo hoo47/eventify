@@ -1,5 +1,13 @@
 package io.github.event.publisher;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
 import io.github.event.core.api.Event;
 import io.github.event.core.api.EventListener;
 import io.github.event.core.api.EventProcessorCallback;
@@ -10,13 +18,6 @@ import io.github.event.transaction.TransactionSynchronization;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 /**
  * 트랜잭션 단계에 따라 이벤트를 발행하는 클래스
@@ -57,8 +58,8 @@ public class TransactionalEventPublisherImpl implements TransactionalEventPublis
     
     @Override
     public void publishInTransaction(Event event, TransactionPhase phase) {
-        if (phase == TransactionPhase.IMMEDIATE || !transactionManager.isTransactionActive()) {
-            // 즉시 발행하거나 트랜잭션이 없는 경우
+        // 트랜잭션이 활성화되어 있지 않으면 즉시 실행
+        if (!transactionManager.isTransactionActive()) {
             processorCallback.multicast(event);
             return;
         }
@@ -75,14 +76,36 @@ public class TransactionalEventPublisherImpl implements TransactionalEventPublis
     
     @Override
     public CompletableFuture<Void> publishAsyncInTransaction(Event event, TransactionPhase phase) {
-        publishInTransaction(event, phase);
+        // 트랜잭션이 활성화되어 있지 않으면 비동기로 즉시 실행
+        if (!transactionManager.isTransactionActive()) {
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            asyncExecutor.execute(() -> {
+                try {
+                    processorCallback.multicast(event);
+                    future.complete(null);
+                } catch (Exception e) {
+                    future.completeExceptionally(e);
+                }
+            });
+            return future;
+        }
+        
+        // 트랜잭션 단계별로 이벤트 저장 (비동기 플래그 설정)
+        eventsMap.computeIfAbsent(phase, k -> new ArrayList<>())
+                .add(new EventListenerPair<>(event, null, true));
+        
+        // 첫 이벤트인 경우에만 동기화 등록
+        if (eventsMap.get(phase).size() == 1) {
+            transactionManager.registerSynchronization(new EventTransactionSynchronization());
+        }
+        
         return CompletableFuture.completedFuture(null);
     }
     
     @Override
     public <T extends Event> void publishInTransaction(Event event, TransactionPhase phase, EventListener<T> listener) {
-        if (phase == TransactionPhase.IMMEDIATE || !transactionManager.isTransactionActive()) {
-            // 즉시 발행하거나 트랜잭션이 없는 경우
+        // 트랜잭션이 활성화되어 있지 않으면 즉시 실행
+        if (!transactionManager.isTransactionActive()) {
             invokeListener(event, listener);
             return;
         }
@@ -99,8 +122,8 @@ public class TransactionalEventPublisherImpl implements TransactionalEventPublis
     
     @Override
     public <T extends Event> void publishAsyncInTransaction(Event event, TransactionPhase phase, EventListener<T> listener) {
-        if (phase == TransactionPhase.IMMEDIATE || !transactionManager.isTransactionActive()) {
-            // 즉시 발행하거나 트랜잭션이 없는 경우
+        // 트랜잭션이 활성화되어 있지 않으면 비동기로 즉시 실행
+        if (!transactionManager.isTransactionActive()) {
             asyncExecutor.execute(() -> invokeListener(event, listener));
             return;
         }
@@ -151,6 +174,11 @@ public class TransactionalEventPublisherImpl implements TransactionalEventPublis
         @Override
         public void afterRollback() {
             publishEventsForPhase(TransactionPhase.AFTER_ROLLBACK);
+        }
+        
+        @Override
+        public void afterCompletion() {
+            publishEventsForPhase(TransactionPhase.AFTER_COMPLETION);
         }
         
         private void publishEventsForPhase(TransactionPhase phase) {

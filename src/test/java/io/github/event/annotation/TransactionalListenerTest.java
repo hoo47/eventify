@@ -48,14 +48,14 @@ class TransactionalListenerTest {
     }
     
     @Test
-    void testImmediatePhase() throws NoSuchMethodException {
-        // 즉시 실행 단계 테스트
-        Method method = TestEventHandler.class.getMethod("handleImmediateEvent", TestEvent.class);
+    void testAfterCompletionPhase() throws NoSuchMethodException {
+        // 완료 후 단계 테스트
+        Method method = TestEventHandler.class.getMethod("handleAfterCompletionEvent", TestEvent.class);
         TransactionalListener annotation = method.getAnnotation(TransactionalListener.class);
         
-        // 즉시 실행 단계 검증
+        // 완료 후 단계 검증
         assertThat(annotation).isNotNull();
-        assertThat(annotation.value()).isEqualTo(TransactionPhase.IMMEDIATE);
+        assertThat(annotation.value()).isEqualTo(TransactionPhase.AFTER_COMPLETION);
     }
     
     @Test
@@ -129,9 +129,9 @@ class TransactionalListenerTest {
             // 롤백 후 트랜잭션 리스너 메서드
         }
         
-        @TransactionalListener(TransactionPhase.IMMEDIATE)
-        public void handleImmediateEvent(TestEvent event) {
-            // 즉시 실행 트랜잭션 리스너 메서드
+        @TransactionalListener(TransactionPhase.AFTER_COMPLETION)
+        public void handleAfterCompletionEvent(TestEvent event) {
+            // 완료 후 트랜잭션 리스너 메서드
         }
         
         public void nonAnnotatedMethod(TestEvent event) {
