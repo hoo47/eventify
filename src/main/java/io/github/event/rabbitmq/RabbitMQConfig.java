@@ -1,15 +1,22 @@
 package io.github.event.rabbitmq;
 
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
+import io.github.event.core.api.Event;
+import io.github.event.core.api.EventListener;
+import io.github.event.core.model.EventHeaders;
 import io.github.event.core.model.TransactionPhase;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
+@Getter
 public class RabbitMQConfig {
     private static final Logger log = LoggerFactory.getLogger(RabbitMQConfig.class);
     
@@ -61,12 +68,4 @@ public class RabbitMQConfig {
             }
         }
     }
-    
-    public String getExchangeName() {
-        return exchangeName;
-    }
-    
-    public String getQueueName() {
-        return queueName;
-    }
-} 
+}
