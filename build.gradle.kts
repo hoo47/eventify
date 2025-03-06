@@ -38,6 +38,7 @@ dependencies {
     testImplementation("org.assertj:assertj-core:3.24.2")
     testImplementation("org.mockito:mockito-core:4.8.0")
     testImplementation("org.mockito:mockito-junit-jupiter:4.8.0")
+    testImplementation("org.awaitility:awaitility:4.2.0")
     
     // RabbitMQ 및 JSON 의존성 (중복 제거)
     implementation("com.rabbitmq:amqp-client:5.16.0")
