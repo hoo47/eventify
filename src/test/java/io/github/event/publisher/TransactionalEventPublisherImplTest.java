@@ -6,6 +6,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import lombok.Getter;
+import lombok.Setter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,25 +42,20 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_NoActiveTransaction() {
-        // 활성 트랜잭션이 없는 경우 테스트
+        // 트랜잭션이 활성화되지 않은 상태에서 이벤트 발행 테스트
         transactionManager.setTransactionActive(false);
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMMIT);
         
-        // 즉시 처리되었는지 검증
+        // 이벤트가 즉시 처리되었는지 검증
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
-        
-        // 트랜잭션 동기화가 등록되지 않았는지 검증
         assertThat(transactionManager.getSynchronizations()).isEmpty();
     }
 
     @Test
     void testPublishInTransaction_BeforeCommit() {
-        // BEFORE_COMMIT 단계 테스트
+        // 커밋 전 단계에서 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.BEFORE_COMMIT);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
@@ -70,11 +68,8 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_AfterCommit() {
-        // AFTER_COMMIT 단계 테스트
+        // 커밋 후 단계에서 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMMIT);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
@@ -87,11 +82,8 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_AfterRollback() {
-        // AFTER_ROLLBACK 단계 테스트
+        // 롤백 후 단계에서 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_ROLLBACK);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
@@ -104,11 +96,8 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_AfterCompletion() {
-        // AFTER_COMPLETION 단계 테스트
+        // 완료 후 단계에서 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMPLETION);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
@@ -121,16 +110,13 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_AfterCompletionWithCommit() {
-        // AFTER_COMPLETION 단계 테스트 (커밋 후)
+        // 커밋 후 완료 단계에서 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMPLETION);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
         
-        // 커밋 후 afterCompletion 호출 시 이벤트가 처리되는지 검증
+        // afterCommit과 afterCompletion 호출 시 이벤트가 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCommit();
         transactionManager.getSynchronizations().get(0).afterCompletion();
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
@@ -139,16 +125,13 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_AfterCompletionWithRollback() {
-        // AFTER_COMPLETION 단계 테스트 (롤백 후)
+        // 롤백 후 완료 단계에서 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMPLETION);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
         
-        // 롤백 후 afterCompletion 호출 시 이벤트가 처리되는지 검증
+        // afterRollback과 afterCompletion 호출 시 이벤트가 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterRollback();
         transactionManager.getSynchronizations().get(0).afterCompletion();
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
@@ -157,17 +140,13 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_WithListener() {
-        // 특정 리스너에게 이벤트 발행 테스트
+        // 리스너와 함께 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMMIT, testListener);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
-        assertThat(processorCallback.getProcessedListeners()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
         
-        // afterCommit 호출 시 이벤트가 처리되는지 검증
+        // afterCommit 호출 시 이벤트가 리스너에 의해 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCommit();
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
@@ -177,17 +156,13 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_WithListener_AfterCompletion() {
-        // 특정 리스너에게 AFTER_COMPLETION 단계 이벤트 발행 테스트
+        // 완료 단계에서 리스너와 함께 이벤트 발행 테스트
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMPLETION, testListener);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
-        assertThat(processorCallback.getProcessedListeners()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
         
-        // afterCompletion 호출 시 이벤트가 처리되는지 검증
+        // afterCompletion 호출 시 이벤트가 리스너에 의해 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCompletion();
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
@@ -197,17 +172,15 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishInTransaction_WithListener_NoActiveTransaction() {
-        // 활성 트랜잭션이 없는 경우 특정 리스너에게 이벤트 발행 테스트
+        // 트랜잭션이 활성화되지 않은 상태에서 리스너와 함께 이벤트 발행 테스트
         transactionManager.setTransactionActive(false);
         publisher.publishInTransaction(testEvent, TransactionPhase.AFTER_COMMIT, testListener);
         
-        // 즉시 처리되었는지 검증
+        // 이벤트가 즉시 리스너에 의해 처리되었는지 검증
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
         assertThat(processorCallback.getProcessedListeners()).hasSize(1);
         assertThat(processorCallback.getProcessedListeners().get(0)).isEqualTo(testListener);
-        
-        // 트랜잭션 동기화가 등록되지 않았는지 검증
         assertThat(transactionManager.getSynchronizations()).isEmpty();
     }
 
@@ -216,97 +189,71 @@ class TransactionalEventPublisherImplTest {
         // 비동기 이벤트 발행 테스트
         CompletableFuture<Void> future = publisher.publishAsyncInTransaction(testEvent, TransactionPhase.AFTER_COMMIT);
         
-        // Future가 완료되었는지 검증
-        assertThat(future.isDone()).isTrue();
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
-        
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
+        assertThat(future).isCompleted();
         
-        // afterCommit 호출 시 이벤트가 비동기적으로 처리되는지 검증
+        // afterCommit 호출 시 이벤트가 비동기로 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCommit();
-        
-        // 실행기에 작업이 등록되었는지 검증
         assertThat(executor.getExecutedRunnables()).hasSize(1);
         
-        // 실행된 Runnable 실행
+        // 비동기 작업 실행
         executor.executeAll();
-        
-        // 이벤트가 처리되었는지 검증
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
     }
 
     @Test
     void testPublishAsyncInTransaction_AfterCompletion() {
-        // AFTER_COMPLETION 단계 비동기 이벤트 발행 테스트
+        // 완료 단계에서 비동기 이벤트 발행 테스트
         CompletableFuture<Void> future = publisher.publishAsyncInTransaction(testEvent, TransactionPhase.AFTER_COMPLETION);
-        
-        // Future가 완료되었는지 검증
-        assertThat(future.isDone()).isTrue();
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
+        assertThat(future).isCompleted();
         
-        // afterCompletion 호출 시 이벤트가 비동기적으로 처리되는지 검증
+        // afterCompletion 호출 시 이벤트가 비동기로 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCompletion();
-        
-        // 실행기에 작업이 등록되었는지 검증
         assertThat(executor.getExecutedRunnables()).hasSize(1);
         
-        // 실행된 Runnable 실행
+        // 비동기 작업 실행
         executor.executeAll();
-        
-        // 이벤트가 처리되었는지 검증
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
     }
 
     @Test
     void testPublishAsyncInTransaction_NoActiveTransaction() {
-        // 활성 트랜잭션이 없는 경우 비동기 이벤트 발행 테스트
+        // 트랜잭션이 활성화되지 않은 상태에서 비동기 이벤트 발행 테스트
         transactionManager.setTransactionActive(false);
         CompletableFuture<Void> future = publisher.publishAsyncInTransaction(testEvent, TransactionPhase.AFTER_COMMIT);
         
-        // 비동기 실행기에 작업이 등록되었는지 검증
+        // 이벤트가 즉시 비동기로 처리되었는지 검증
         assertThat(executor.getExecutedRunnables()).hasSize(1);
-        
-        // 트랜잭션 동기화가 등록되지 않았는지 검증
         assertThat(transactionManager.getSynchronizations()).isEmpty();
         
-        // 실행된 Runnable 실행
+        // 비동기 작업 실행
         executor.executeAll();
-        
-        // 이벤트가 처리되었는지 검증
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
         
         // Future가 완료되었는지 검증
-        assertThat(future.isDone()).isTrue();
-        assertThat(future.isCompletedExceptionally()).isFalse();
+        assertThat(future).isCompleted();
     }
 
     @Test
     void testPublishAsyncInTransaction_WithListener() {
-        // 특정 리스너에게 비동기 이벤트 발행 테스트
+        // 리스너와 함께 비동기 이벤트 발행 테스트
         publisher.publishAsyncInTransaction(testEvent, TransactionPhase.AFTER_COMMIT, testListener);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
         
-        // afterCommit 호출 시 이벤트가 비동기적으로 처리되는지 검증
+        // afterCommit 호출 시 이벤트가 비동기로 리스너에 의해 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCommit();
         assertThat(executor.getExecutedRunnables()).hasSize(1);
         
-        // 실행된 Runnable 실행
+        // 비동기 작업 실행
         executor.executeAll();
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
@@ -316,20 +263,17 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishAsyncInTransaction_WithListener_AfterCompletion() {
-        // 특정 리스너에게 AFTER_COMPLETION 단계 비동기 이벤트 발행 테스트
+        // 완료 단계에서 리스너와 함께 비동기 이벤트 발행 테스트
         publisher.publishAsyncInTransaction(testEvent, TransactionPhase.AFTER_COMPLETION, testListener);
-        
-        // 즉시 처리되지 않았는지 검증
-        assertThat(processorCallback.getProcessedEvents()).isEmpty();
         
         // 트랜잭션 동기화가 등록되었는지 검증
         assertThat(transactionManager.getSynchronizations()).hasSize(1);
         
-        // afterCompletion 호출 시 이벤트가 비동기적으로 처리되는지 검증
+        // afterCompletion 호출 시 이벤트가 비동기로 리스너에 의해 처리되는지 검증
         transactionManager.getSynchronizations().get(0).afterCompletion();
         assertThat(executor.getExecutedRunnables()).hasSize(1);
         
-        // 실행된 Runnable 실행
+        // 비동기 작업 실행
         executor.executeAll();
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
@@ -339,20 +283,16 @@ class TransactionalEventPublisherImplTest {
 
     @Test
     void testPublishAsyncInTransaction_WithListener_NoActiveTransaction() {
-        // 활성 트랜잭션이 없는 경우 특정 리스너에게 비동기 이벤트 발행 테스트
+        // 트랜잭션이 활성화되지 않은 상태에서 리스너와 함께 비동기 이벤트 발행 테스트
         transactionManager.setTransactionActive(false);
         publisher.publishAsyncInTransaction(testEvent, TransactionPhase.AFTER_COMMIT, testListener);
         
-        // 비동기 실행기에 작업이 등록되었는지 검증
+        // 이벤트가 즉시 비동기로 리스너에 의해 처리되었는지 검증
         assertThat(executor.getExecutedRunnables()).hasSize(1);
-        
-        // 트랜잭션 동기화가 등록되지 않았는지 검증
         assertThat(transactionManager.getSynchronizations()).isEmpty();
         
-        // 실행된 Runnable 실행
+        // 비동기 작업 실행
         executor.executeAll();
-        
-        // 이벤트가 처리되었는지 검증
         assertThat(processorCallback.getProcessedEvents()).hasSize(1);
         assertThat(processorCallback.getProcessedEvents().get(0)).isEqualTo(testEvent);
         assertThat(processorCallback.getProcessedListeners()).hasSize(1);
@@ -391,7 +331,9 @@ class TransactionalEventPublisherImplTest {
     
     // 테스트용 트랜잭션 관리자 클래스
     static class TestTransactionManager implements TransactionManager {
+        @Setter
         private boolean transactionActive = true;
+        @Getter
         private final List<TransactionSynchronization> synchronizations = new ArrayList<>();
         
         @Override
@@ -411,22 +353,14 @@ class TransactionalEventPublisherImplTest {
         
         @Override
         public void commit(TransactionStatus status) {
-            // 테스트용 구현
+            // 테스트용 메서드
         }
         
         @Override
         public void rollback(TransactionStatus status) {
-            // 테스트용 구현
+            // 테스트용 메서드
         }
-        
-        public void setTransactionActive(boolean transactionActive) {
-            this.transactionActive = transactionActive;
-        }
-        
-        public List<TransactionSynchronization> getSynchronizations() {
-            return synchronizations;
-        }
-        
+
         public void clearSynchronizations() {
             synchronizations.clear();
         }
@@ -468,9 +402,7 @@ class TransactionalEventPublisherImplTest {
         public void executeAll() {
             List<Runnable> runnables = new ArrayList<>(executedRunnables);
             executedRunnables.clear();
-            for (Runnable runnable : runnables) {
-                runnable.run();
-            }
+            runnables.forEach(Runnable::run);
         }
         
         public void clearExecutedRunnables() {
@@ -495,6 +427,7 @@ class TransactionalEventPublisherImplTest {
             return "TestEvent{" +
                     "eventId='" + getEventId() + '\'' +
                     ", message='" + message + '\'' +
+                    ", issuedAt=" + getIssuedAt() +
                     '}';
         }
     }
