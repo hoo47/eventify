@@ -1,10 +1,11 @@
 package io.github.event.registry;
 
-import io.github.event.annotations.EventListener;
-import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+
+import io.github.event.annotations.EventListener;
 
 public class EventRegistryTest {
 
