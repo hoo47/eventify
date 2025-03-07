@@ -25,7 +25,7 @@ public class TransactionalEventPublisherTest {
     }
 
     @Test
-    public void publishEventDuringActiveTransaction_delaysEvent() {
+    public void publishEventDuringActiveTransaction_delaysEvent() throws Exception {
         // Arrange: create a DummyTransactionManager and start a transaction
         DummyTransactionManager dtm = new DummyTransactionManager();
         dtm.begin(); // state becomes ACTIVE
@@ -46,19 +46,16 @@ public class TransactionalEventPublisherTest {
             .isFalse();
         
         // Simulate transaction commit by changing state to COMMITTED
-        dtm.commit(); // state becomes COMMITTED
+        dtm.commit(); // state becomes COMMITTED, which triggers automatic flush
         
-        // Act: flush delayed events
-        publisher.flush();
-        
-        // Assert: after flush, listener should be invoked
+        // Assert: after commit, flush has been automatically invoked, so listener should be invoked
         assertThat(listener.isInvoked())
-            .as("Listener should be invoked after flush when transaction is not active")
+            .as("Listener should be invoked after commit when transaction is not active")
             .isTrue();
     }
 
     @Test
-    public void publishEventWithoutActiveTransaction_publishesImmediately() {
+    public void publishEventWithoutActiveTransaction_publishesImmediately() throws Exception {
         // Arrange: create a DummyTransactionManager with no active transaction
         DummyTransactionManager dtm = new DummyTransactionManager();
         // Do not begin transaction, so state remains "NONE"
