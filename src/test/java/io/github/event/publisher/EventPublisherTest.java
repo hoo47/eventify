@@ -29,7 +29,7 @@ public class EventPublisherTest {
         DummyListener listener = new DummyListener();
         registry.register(listener);
         
-        DefaultEventPublisher publisher = new DefaultEventPublisher(registry);
+        ApplicationEventPublisher publisher = new DefaultEventPublisher(registry);
         publisher.publish(new TestEvent());
         
         assertThat(listener.isInvoked())
