@@ -1,39 +1,53 @@
 package io.github.event.publisher;
 
-import io.github.event.core.api.AsynchronousEventPublisher;
-import io.github.event.core.api.Event;
-import io.github.event.core.api.EventProcessorCallback;
-import io.github.event.core.api.SynchronousEventPublisher;
-import lombok.RequiredArgsConstructor;
-import java.util.concurrent.CompletableFuture;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.List;
 
-/**
- * 기본 이벤트 발행자 구현
- */
-@RequiredArgsConstructor
-public class DefaultEventPublisher implements SynchronousEventPublisher, AsynchronousEventPublisher {
-    
-    private final EventProcessorCallback processorCallback;
-    
-    @Override
-    public void publish(Event event) {
-        processorCallback.multicast(event);
+import io.github.event.annotations.Async;
+import io.github.event.async.AsyncExecutor;
+import io.github.event.registry.EventRegistry;
+import io.github.event.registry.HandlerMethod;
+
+public class DefaultEventPublisher implements ApplicationEventPublisher {
+
+    private final EventRegistry registry;
+    private final AsyncExecutor asyncExecutor;
+
+    // Constructor with AsyncExecutor
+    public DefaultEventPublisher(EventRegistry registry, AsyncExecutor asyncExecutor) {
+        this.registry = registry;
+        this.asyncExecutor = asyncExecutor;
     }
-    
-    @Override
-    public void publishSync(Event event) {
-        processorCallback.multicast(event);
+
+    // Constructor without AsyncExecutor, behaves synchronously
+    public DefaultEventPublisher(EventRegistry registry) {
+        this(registry, null);
     }
-    
+
     @Override
-    public CompletableFuture<Void> publishAsync(Event event) {
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        try {
-            processorCallback.multicast(event);
-            future.complete(null);
-        } catch (Exception e) {
-            future.completeExceptionally(e);
+    public void publish(Object event) {
+        List<HandlerMethod> handlers = registry.getHandlersForEvent(event);
+        for (HandlerMethod handler : handlers) {
+            Method method = handler.getMethod();
+            method.setAccessible(true);
+            if (asyncExecutor != null && method.isAnnotationPresent(Async.class)) {
+                asyncExecutor.submit(() -> {
+                    try {
+                        method.invoke(handler.getInstance(), event);
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        Throwable cause = (e instanceof InvocationTargetException && e.getCause() != null) ? e.getCause() : e;
+                        throw new RuntimeException("Failed to invoke async event handler: " + cause.getMessage(), e);
+                    }
+                });
+            } else {
+                try {
+                    method.invoke(handler.getInstance(), event);
+                } catch (IllegalAccessException | InvocationTargetException e) {
+                    Throwable cause = (e instanceof InvocationTargetException && e.getCause() != null) ? e.getCause() : e;
+                    throw new RuntimeException("Failed to invoke event handler: " + cause.getMessage(), e);
+                }
+            }
         }
-        return future;
     }
 } 
