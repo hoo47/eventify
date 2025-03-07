@@ -191,3 +191,15 @@ eventify.shutdown();
 ## 라이선스
 
 이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 LICENSE 파일을 참조하세요.
+
+## Adapter Integration
+
+Eventify supports integration with external transaction management systems via adapters. 
+
+For detailed instructions, please refer to [ADAPTER_SETUP.md](ADAPTER_SETUP.md). 
+
+Available adapters include:
+- **SpringTransactionManagerAdapter**: For Spring Boot/JPA environments, wrapping Spring's PlatformTransactionManager.
+- **JakartaTransactionManagerAdapter**: For Jakarta EE/JTA environments, using JTA's UserTransaction.
+
+By configuring the appropriate adapter in your application, you can ensure that Eventify seamlessly integrates with your transaction management system.
