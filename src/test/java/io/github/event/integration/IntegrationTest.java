@@ -1,8 +1,5 @@
 package io.github.event.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import org.junit.jupiter.api.Test;
-
 import io.github.event.annotations.Async;
 import io.github.event.annotations.EventListener;
 import io.github.event.annotations.TransactionalEventListener;
@@ -10,15 +7,22 @@ import io.github.event.annotations.TransactionalPhase;
 import io.github.event.async.AsyncExecutor;
 import io.github.event.publisher.ApplicationEventPublisher;
 import io.github.event.publisher.EventPublisherFactory;
-import io.github.event.publisher.TransactionalEventPublisher;
 import io.github.event.registry.EventRegistry;
 import io.github.event.transaction.DummyTransactionManager;
+import jakarta.transaction.HeuristicMixedException;
+import jakarta.transaction.HeuristicRollbackException;
+import jakarta.transaction.NotSupportedException;
+import jakarta.transaction.SystemException;
 import lombok.Getter;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class IntegrationTest {
 
     // 1. Synchronous event flow test
-    static class SyncEvent { }
+    static class SyncEvent {
+    }
 
     @Getter
     static class SyncListener {
@@ -42,12 +46,13 @@ public class IntegrationTest {
         publisher.publish(new SyncEvent());
 
         assertThat(listener.isInvoked())
-            .as("Synchronous listener should be invoked immediately")
-            .isTrue();
+                .as("Synchronous listener should be invoked immediately")
+                .isTrue();
     }
 
     // 2. Transactional event flow test
-    static class TxEvent { }
+    static class TxEvent {
+    }
 
     @Getter
     static class TxListener {
@@ -61,7 +66,7 @@ public class IntegrationTest {
     }
 
     @Test
-    public void testTransactionalEventFlow() {
+    public void testTransactionalEventFlow() throws HeuristicRollbackException, SystemException, HeuristicMixedException, NotSupportedException {
         DummyTransactionManager dtm = new DummyTransactionManager();
         dtm.begin(); // Transaction is active
 
@@ -74,20 +79,19 @@ public class IntegrationTest {
 
         // Since transaction is active, event should be delayed
         assertThat(listener.isInvoked())
-            .as("Listener should not be invoked during an active transaction")
-            .isFalse();
+                .as("Listener should not be invoked during an active transaction")
+                .isFalse();
 
         dtm.commit(); // End transaction
-        // Flush delayed events
-        ((TransactionalEventPublisher) publisher).flush();
 
         assertThat(listener.isInvoked())
-            .as("Listener should be invoked after flush when transaction is not active")
-            .isTrue();
+                .as("Listener should be invoked after flush when transaction is not active")
+                .isTrue();
     }
 
     // 3. Asynchronous event flow test
-    static class AsyncEvent { }
+    static class AsyncEvent {
+    }
 
     @Getter
     static class AsyncListener {
@@ -115,14 +119,15 @@ public class IntegrationTest {
         Thread.sleep(1000);
 
         assertThat(listener.isInvoked())
-            .as("Async listener should be invoked within 1 second")
-            .isTrue();
+                .as("Async listener should be invoked within 1 second")
+                .isTrue();
 
         asyncExecutor.shutdown();
     }
 
     // 4. Transactional Async event flow test
-    static class TxAsyncEvent { }
+    static class TxAsyncEvent {
+    }
 
     @Getter
     static class TxAsyncListener {
@@ -137,7 +142,7 @@ public class IntegrationTest {
     }
 
     @Test
-    public void testTransactionalAsyncEventFlow() throws InterruptedException {
+    public void testTransactionalAsyncEventFlow() throws InterruptedException, HeuristicRollbackException, SystemException, HeuristicMixedException, NotSupportedException {
         // Create a DummyTransactionManager and begin a transaction
         DummyTransactionManager dtm = new DummyTransactionManager();
         dtm.begin(); // Transaction is active
@@ -154,19 +159,18 @@ public class IntegrationTest {
 
         // During an active transaction the listener should not be invoked
         assertThat(listener.isInvoked())
-            .as("Transactional async listener should not be invoked during an active transaction")
-            .isFalse();
+                .as("Transactional async listener should not be invoked during an active transaction")
+                .isFalse();
 
         // Commit the transaction and flush delayed events
         dtm.commit();
-        ((TransactionalEventPublisher) publisher).flush();
 
         // Wait for async processing to complete
         Thread.sleep(3000);
 
         assertThat(listener.isInvoked())
-            .as("Transactional async listener should be invoked asynchronously after flush")
-            .isTrue();
+                .as("Transactional async listener should be invoked asynchronously after flush")
+                .isTrue();
 
         asyncExecutor.shutdown();
     }
